@@ -119,28 +119,66 @@ passport.use(
 
 // OAuth Routes
 app.get("/auth/google", passport.authenticate("google", { scope: ["profile", "email"], session: false }));
+
 app.get(
   "/auth/google/callback",
   passport.authenticate("google", { failureRedirect: "/", session: false }),
-  (req, res) => {
-    const { token, isNew } = req.user;
-    const redirectUrl = isNew
-      ? `http://localhost:5173/userid?token=${token}`
-      : `http://localhost:5173/home?token=${token}`;
-    res.redirect(redirectUrl);
+  async (req, res) => {
+    try {
+      const { token, isNew } = req.user;
+
+      // Fetch the user details from the token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findOne({ where: { oauthId: decoded.oauthId } });
+
+      if (!user) {
+        console.error("Error: User not found in the database.");
+        return res.redirect("http://localhost:5173/error");
+      }
+
+      // Redirect to /userid if the userId is null or empty
+      if (!user.userId || user.userId.trim() === "") {
+        return res.redirect(`http://localhost:5173/userid?token=${token}`);
+      }
+
+      // Otherwise, redirect to home
+      res.redirect(`http://localhost:5173/home?token=${token}`);
+    } catch (error) {
+      console.error("Error during Google callback:", error);
+      res.redirect("http://localhost:5173/error");
+    }
   }
 );
 
 app.get("/auth/github", passport.authenticate("github", { session: false }));
+
 app.get(
   "/auth/github/callback",
   passport.authenticate("github", { failureRedirect: "/", session: false }),
-  (req, res) => {
-    const { token, isNew } = req.user;
-    const redirectUrl = isNew
-      ? `http://localhost:5173/userid?token=${token}`
-      : `http://localhost:5173/home?token=${token}`;
-    res.redirect(redirectUrl);
+  async (req, res) => {
+    try {
+      const { token, isNew } = req.user;
+
+      // Fetch the user details from the token
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findOne({ where: { oauthId: decoded.oauthId } });
+
+      if (!user) {
+        console.error("Error: User not found in the database.");
+        return res.redirect("http://localhost:5173/error");
+      }
+
+      // Redirect to /userid if the userId is null or empty
+      if (!user.userId || user.userId.trim() === "") {
+        return res.redirect(`http://localhost:5173/userid?token=${token}`);
+      }
+
+      // Otherwise, redirect to home
+      res.redirect(`http://localhost:5173/home?token=${token}`);
+    } catch (error) {
+      console.error("Error during GitHub callback:", error);
+      res.redirect("http://localhost:5173/error");
+    }
   }
 );
 
@@ -150,27 +188,31 @@ app.post(
   passport.authenticate("jwt", { session: false }),
   async (req, res) => {
     try {
-      const { userId } = req.body;
-      const { oauthId } = req.user;
+      const { userId } = req.body; // Get userId from request body
+      const { oauthId } = req.user; // Get oauthId from authenticated user
 
       // Validate userId in backend
       if (!userId || typeof userId !== "string" || !userId.trim()) {
         return res.status(400).json({ message: "Valid userId is required" });
       }
 
+      // Find the user by oauthId
       const user = await User.findOne({ where: { oauthId } });
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
 
+      // Check for duplicate userId
       const existingUser = await User.findOne({ where: { userId } });
       if (existingUser) {
         return res.status(409).json({ message: "userId already exists" });
       }
 
-      user.userId = userId.trim(); // Ensure the userId is trimmed before saving
+      // Update the userId for the user
+      user.userId = userId.trim(); // Trim any whitespace from userId
       await user.save();
 
+      // Generate a new token with the updated userId
       const token = jwt.sign({ userId: user.userId }, process.env.JWT_SECRET, { expiresIn: "1h" });
       res.status(200).json({ token });
     } catch (error) {
