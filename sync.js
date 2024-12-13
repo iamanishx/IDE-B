@@ -1,29 +1,13 @@
-require("dotenv").config();  
-const { Sequelize, DataTypes } = require("sequelize");
+require("dotenv").config();
+const { sequelize } = require("./models/index");
 
- const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
-  host: process.env.DB_HOST,
-  dialect: "postgres",
-  logging: false, 
-});
-
- const User = require("./models/user")(sequelize, DataTypes);
-const Project = require("./models/project")(sequelize, DataTypes);
-
-// Apply associations
-User.associate({ Project });
-Project.associate({ User });
-
-// Sync database
-async function syncDatabase() {
+(async () => {
   try {
-    await sequelize.sync({ force: false }); 
-    console.log("Database synchronized successfully!");
+    await sequelize.sync({ force: false }); // Use `force: true` to reset the database
+    console.log("Database synced successfully!");
+    process.exit(0); // Exit the process on success
   } catch (error) {
-    console.error("Error syncing the database:", error);
+    console.error("Error syncing database:", error);
+    process.exit(1); // Exit with an error code
   }
-}
-
-syncDatabase();
-
-module.exports = { sequelize, User, Project };
+})();
